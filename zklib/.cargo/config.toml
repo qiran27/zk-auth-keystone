@@ -1,0 +1,7 @@
+[env]
+RAYON_NUM_THREADS = "1"
+
+[build]
+rustflags = ["--cfg", "rayon_no_default_global"]
+
+
