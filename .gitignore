@@ -1,0 +1,32 @@
+# Rust/Cargo
+zklib/target/
+zklib/Cargo.lock
+zklib/libzklib.a
+zklib/zklib.h
+
+# Build artifacts
+*.o
+*.a
+*.so
+enclave1
+enclave2
+zkid-vc-runner
+*.ke
+
+# Keystone
+eyrie-rt
+loader.bin
+.options_log
+
+# Editor
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+
