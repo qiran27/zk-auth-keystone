@@ -167,44 +167,30 @@ Enclave1 (Prover)                Host                Enclave2 (Verifier)
 - **CMake 3.10+**: Build system
 
 ### Build Steps
-
 ```bash
-# 1. Install Rust if not already installed
-# curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
-# rustup target add riscv64gc-unknown-linux-gnu
+# 克隆该仓库到本地
+git clone -b zkid-acl --single-branch https://github.com/qiran27/zk-auth-keystone.git
 
-# 2. Set SDK directory
-export KEYSTONE_SDK_DIR=/path/to/keystone/sdk
+# 把文件拷贝到keystone/examples目录下
+cp -r zkid-acl /path/to/keystone/examples
 
-# 3. Build using the script (recommended)
-cd examples/zkid-acl
-./build.sh
-
-# The build script will:
-# - Check Rust installation
-# - Build Rust ZK library (arkworks) as static library
-# - Build enclaves and link with ZK library
-# - Create package
-
-# 4. Or build manually:
-cd zklib
+# 进入到zkid-acl/zklib目录下执行编译rust零知识证明库
+cd /path/to/keystone/examples/zkid-acl/zklib/build-zklib.sh
+chmod 777 ./build-zklib.sh
 ./build-zklib.sh
 
 ## 🚀 Running
 
 ### On Keystone System
 
-```bash
-# Navigate to build directory
-cd build/examples/zkid-acl
+# 进入到文件所在目录
+cd /usr/share/keystone/examples
 
-# Run the test
-./zkid-acl-runner enclave1 enclave2 eyrie-rt loader.bin
+# 执行测试程序
+./zkid-acl.ke
 ```
-
 ### Expected Output
 
-```
 ╔═══════════════════════════════════════════════════════════╗
 ║     ZK-ACL Identity Authentication for Keystone TEE      ║
 ╚═══════════════════════════════════════════════════════════╝
