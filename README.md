@@ -190,7 +190,7 @@ cd /usr/share/keystone/examples
 ./zkid-acl.ke
 ```
 ### Expected Output
-
+```
 ╔═══════════════════════════════════════════════════════════╗
 ║     ZK-ACL Identity Authentication for Keystone TEE      ║
 ╚═══════════════════════════════════════════════════════════╝
