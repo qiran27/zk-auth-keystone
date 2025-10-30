@@ -222,15 +222,25 @@ impl ConstraintSynthesizer<Fr> for VCCircuit {
 ### 构建步骤
 
 ```bash
-# 1. 设置环境变量
-export KEYSTONE_SDK_DIR=/path/to/keystone/sdk
+# 克隆该仓库到本地
+git clone -b zkid-vc --single-branch https://github.com/qiran27/zk-auth-keystone.git
 
-# 2. 构建项目
-cd examples/zkid-vc
-./build.sh
+# 把文件拷贝到keystone/examples目录下
+cp -r zkid-vc /path/to/keystone/examples
 
-# 3. 运行测试
-cd ../../build/examples/zkid-vc
+# 进入到zkid-acl/zklib目录下执行编译rust零知识证明库
+cd /path/to/keystone/examples/zkid-vc/zklib/build-zklib.sh
+chmod 777 ./build-zklib.sh
+./build-zklib.sh
+
+## 🚀 Running
+
+### On Keystone System
+
+# 进入到文件所在目录
+cd /usr/share/keystone/examples
+
+# 执行测试程序
 ./zkid-vc.ke
 ```
 
