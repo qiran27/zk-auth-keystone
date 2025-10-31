@@ -90,8 +90,6 @@ struct VCCircuit {
 
 impl ConstraintSynthesizer<Fr> for VCCircuit {
     fn generate_constraints(self, cs: ConstraintSystemRef<Fr>) -> Result<(), SynthesisError> {
-        // 简化电路：类似 zkid-acl，只做最基本的约束
-        // 实际的签名验证和时间检查在 Rust 代码中完成
         
         // 分配私密输入
         let vc_hash_var = cs.new_witness_variable(|| {
