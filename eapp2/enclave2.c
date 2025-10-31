@@ -19,6 +19,8 @@
 #define OCALL_WAIT_PROOF           7
 #define OCALL_SEND_RESULT          8
 #define OCALL_GET_RESULT           9
+#define OCALL_GET_ISSUER_INFO      10
+#define OCALL_GET_TRUSTED_ISSUERS  11
 
 // ============================================================================
 // Communication Structures
@@ -44,27 +46,23 @@ struct ProofSubmission {
 
 // List of trusted Issuer public keys
 // In production, this could be loaded from sealed storage or managed dynamically
-static const char* TRUSTED_ISSUERS[] = {
-    // HR Department - issues employee credentials
-    "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
-    
-    // Government Agency - issues citizen IDs
-    "fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
-    
-    // University - issues degree certificates
-    "abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789",
-    
-    NULL
-};
+// NOTE: These should be replaced with REAL Ed25519 public keys (32 bytes hex = 64 chars)
+// For testing, we generate these dynamically in main()
+static char TRUSTED_ISSUER_HR[65];       // HR Department
+static char TRUSTED_ISSUER_GOV[65];      // Government Agency
+static char TRUSTED_ISSUER_UNI[65];      // University
+
+static const char** TRUSTED_ISSUERS = NULL;
+static const char* TRUSTED_ISSUERS_ARRAY[4] = {NULL, NULL, NULL, NULL};
 
 // Map group names to trusted Issuers
 static const char* get_trusted_issuer_for_group(const char* group_name) {
     if (strcmp(group_name, "GroupX") == 0) {
-        return TRUSTED_ISSUERS[0];  // HR Department
+        return TRUSTED_ISSUERS_ARRAY[0];  // HR Department
     } else if (strcmp(group_name, "GroupY") == 0) {
-        return TRUSTED_ISSUERS[1];  // Government
+        return TRUSTED_ISSUERS_ARRAY[1];  // Government
     } else if (strcmp(group_name, "GroupZ") == 0) {
-        return TRUSTED_ISSUERS[2];  // University
+        return TRUSTED_ISSUERS_ARRAY[2];  // University
     }
     return NULL;  // Unknown group
 }
@@ -210,13 +208,70 @@ int main() {
     // Initialize challenge storage
     memset(challenges, 0, sizeof(challenges));
     
-    // Display trusted Issuers
-    print_msg("[Enclave2] Trusted Issuer Registry:\n");
-    for (int i = 0; TRUSTED_ISSUERS[i] != NULL; i++) {
-        snprintf(buffer, sizeof(buffer), 
-                 "  - Issuer %d: %.16s...\n", i+1, TRUSTED_ISSUERS[i]);
-        print_msg(buffer);
+    // ========================================
+    // Generate Trusted Issuer Public Keys (deterministic, inside enclave)
+    // ========================================
+    print_msg("[Enclave2] Generating trusted Issuer public keys (deterministic)...\n");
+    
+    // Generate HR Department keypair (seed 12345)
+    char hr_privkey[65];
+    memset(TRUSTED_ISSUER_HR, 0, sizeof(TRUSTED_ISSUER_HR));
+    memset(hr_privkey, 0, sizeof(hr_privkey));
+    
+    if (ZK_GenerateIssuerKeypairDeterministic(
+        12345,  // Seed for HR Department (must match Enclave1)
+        TRUSTED_ISSUER_HR, sizeof(TRUSTED_ISSUER_HR),
+        hr_privkey, sizeof(hr_privkey)
+    ) != 0) {
+        print_msg("[Enclave2] ERROR: Failed to generate HR Issuer keypair\n");
+        EAPP_RETURN(1);
     }
+    
+    // Generate Government Agency keypair (seed 67890)
+    char gov_privkey[65];
+    memset(TRUSTED_ISSUER_GOV, 0, sizeof(TRUSTED_ISSUER_GOV));
+    memset(gov_privkey, 0, sizeof(gov_privkey));
+    
+    if (ZK_GenerateIssuerKeypairDeterministic(
+        67890,  // Seed for Government
+        TRUSTED_ISSUER_GOV, sizeof(TRUSTED_ISSUER_GOV),
+        gov_privkey, sizeof(gov_privkey)
+    ) != 0) {
+        print_msg("[Enclave2] ERROR: Failed to generate Gov Issuer keypair\n");
+        EAPP_RETURN(1);
+    }
+    
+    // Generate University keypair (seed 11111)
+    char uni_privkey[65];
+    memset(TRUSTED_ISSUER_UNI, 0, sizeof(TRUSTED_ISSUER_UNI));
+    memset(uni_privkey, 0, sizeof(uni_privkey));
+    
+    if (ZK_GenerateIssuerKeypairDeterministic(
+        11111,  // Seed for University
+        TRUSTED_ISSUER_UNI, sizeof(TRUSTED_ISSUER_UNI),
+        uni_privkey, sizeof(uni_privkey)
+    ) != 0) {
+        print_msg("[Enclave2] ERROR: Failed to generate Uni Issuer keypair\n");
+        EAPP_RETURN(1);
+    }
+    
+    // Setup TRUSTED_ISSUERS_ARRAY
+    TRUSTED_ISSUERS_ARRAY[0] = TRUSTED_ISSUER_HR;
+    TRUSTED_ISSUERS_ARRAY[1] = TRUSTED_ISSUER_GOV;
+    TRUSTED_ISSUERS_ARRAY[2] = TRUSTED_ISSUER_UNI;
+    TRUSTED_ISSUERS_ARRAY[3] = NULL;
+    
+    print_msg("[Enclave2] ✓ Generated real Ed25519 Issuer public keys\n");
+    print_msg("[Enclave2] Trusted Issuer Registry:\n");
+    snprintf(buffer, sizeof(buffer), 
+             "  - HR Department: %.16s...\n", TRUSTED_ISSUER_HR);
+    print_msg(buffer);
+    snprintf(buffer, sizeof(buffer), 
+             "  - Government: %.16s...\n", TRUSTED_ISSUER_GOV);
+    print_msg(buffer);
+    snprintf(buffer, sizeof(buffer), 
+             "  - University: %.16s...\n", TRUSTED_ISSUER_UNI);
+    print_msg(buffer);
     
     print_msg("[Enclave2] Ready to accept join requests\n");
     print_msg("[Enclave2] NOTE: We do NOT maintain an ACL!\n");

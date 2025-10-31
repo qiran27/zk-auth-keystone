@@ -36,6 +36,8 @@
 #define OCALL_WAIT_PROOF           7
 #define OCALL_SEND_RESULT          8
 #define OCALL_GET_RESULT           9
+#define OCALL_GET_ISSUER_INFO      10
+#define OCALL_GET_TRUSTED_ISSUERS  11
 
 // ============================================================================
 // Global message queues for inter-enclave communication
@@ -370,6 +372,7 @@ void Host::get_result_wrapper(RunData& run_data) {
     }
 }
 
+
 // ============================================================================
 // OCALL Dispatcher
 // ============================================================================
@@ -451,6 +454,7 @@ Report Host::run(const std::string& nonce) {
     }
 }
 
+
 // ============================================================================
 // Main function
 // ============================================================================
@@ -469,8 +473,8 @@ int main(int argc, char** argv) {
     std::string loader = argv[4];
     
     Keystone::Params params;
-    params.setFreeMemSize(8 * 1024 * 1024);   // 8MB
-    params.setUntrustedSize(2 * 1024 * 1024); // 2MB
+    params.setFreeMemSize(16 * 1024 * 1024);  // 16MB (为复杂 ZK 电路增加内存)
+    params.setUntrustedSize(4 * 1024 * 1024);  // 4MB (适度增加 untrusted 内存)
     
     std::string nonce = "zkvc_test_" + std::to_string(time(nullptr));
     
@@ -495,6 +499,7 @@ int main(int argc, char** argv) {
     verifier_host.set_rt_file(runtime);
     verifier_host.set_ld_file(loader);
     verifier_host.set_params(params);
+    // Verifier doesn't need issuer private key, only public keys
     
     std::thread verifier_thread([&]() {
         try {

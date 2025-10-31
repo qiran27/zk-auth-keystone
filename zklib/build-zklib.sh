@@ -56,10 +56,97 @@ extern "C" {
 int ZK_Init(void);
 
 /**
+ * Generate Ed25519 keypair for Issuer (random).
+ * 
+ * @param public_key_out Output buffer for hex-encoded public key (65 bytes)
+ * @param public_key_size Size of public_key_out buffer
+ * @param private_key_out Output buffer for hex-encoded private key (65 bytes)
+ * @param private_key_size Size of private_key_out buffer
+ * @return 0 on success, -1 on failure
+ */
+int ZK_GenerateIssuerKeypair(
+    char* public_key_out,
+    size_t public_key_size,
+    char* private_key_out,
+    size_t private_key_size
+);
+
+/**
+ * Generate DETERMINISTIC Ed25519 keypair for Issuer (using seed).
+ * This allows both Prover and Verifier to generate the same keypair for testing.
+ * 
+ * @param seed Deterministic seed for key generation
+ * @param public_key_out Output buffer for hex-encoded public key (65 bytes)
+ * @param public_key_size Size of public_key_out buffer
+ * @param private_key_out Output buffer for hex-encoded private key (65 bytes)
+ * @param private_key_size Size of private_key_out buffer
+ * @return 0 on success, -1 on failure
+ */
+int ZK_GenerateIssuerKeypairDeterministic(
+    uint64_t seed,
+    char* public_key_out,
+    size_t public_key_size,
+    char* private_key_out,
+    size_t private_key_size
+);
+
+/**
+ * Sign VC with Issuer private key (Ed25519).
+ * 
+ * @param holder_id Holder identifier
+ * @param holder_id_len Length of holder_id
+ * @param issuer Issuer identifier
+ * @param issuer_len Length of issuer
+ * @param issue_date Issue timestamp
+ * @param expiry_date Expiry timestamp
+ * @param issuer_private_key Hex-encoded issuer private key (64 chars)
+ * @param signature_out Output buffer for hex-encoded signature (129 bytes)
+ * @param signature_out_size Size of signature_out buffer
+ * @return 0 on success, -1 on failure
+ */
+int ZK_SignVC(
+    const char* holder_id,
+    size_t holder_id_len,
+    const char* issuer,
+    size_t issuer_len,
+    uint64_t issue_date,
+    uint64_t expiry_date,
+    const char* issuer_private_key,
+    char* signature_out,
+    size_t signature_out_size
+);
+
+/**
+ * Verify VC signature with Issuer public key.
+ * 
+ * @param holder_id Holder identifier
+ * @param holder_id_len Length of holder_id
+ * @param issuer Issuer identifier
+ * @param issuer_len Length of issuer
+ * @param issue_date Issue timestamp
+ * @param expiry_date Expiry timestamp
+ * @param signature Hex-encoded VC signature
+ * @param issuer_public_key Hex-encoded issuer public key
+ * @return 1 if valid, 0 if invalid
+ */
+int ZK_VerifyVCSignature(
+    const char* holder_id,
+    size_t holder_id_len,
+    const char* issuer,
+    size_t issuer_len,
+    uint64_t issue_date,
+    uint64_t expiry_date,
+    const char* signature,
+    const char* issuer_public_key
+);
+
+/**
  * Compute the VC message hash for testing/verification.
  * 
  * @param holder_id Holder identifier
  * @param holder_id_len Length of holder_id
+ * @param issuer Issuer identifier
+ * @param issuer_len Length of issuer
  * @param issue_date Issue timestamp
  * @param expiry_date Expiry timestamp
  * @param vc_hash_out Output buffer for hex-encoded hash
@@ -69,6 +156,8 @@ int ZK_Init(void);
 int ZK_ComputeVCHash(
     const char* holder_id,
     size_t holder_id_len,
+    const char* issuer,
+    size_t issuer_len,
     uint64_t issue_date,
     uint64_t expiry_date,
     char* vc_hash_out,
@@ -80,6 +169,8 @@ int ZK_ComputeVCHash(
  * 
  * @param holder_id Holder identifier
  * @param holder_id_len Length of holder_id
+ * @param issuer Issuer identifier
+ * @param issuer_len Length of issuer
  * @param issue_date Issue timestamp
  * @param expiry_date Expiry timestamp
  * @param vc_signature Hex-encoded VC signature (128 chars)
@@ -93,6 +184,8 @@ int ZK_ComputeVCHash(
 int ZK_GenerateVCProof(
     const char* holder_id,
     size_t holder_id_len,
+    const char* issuer,
+    size_t issuer_len,
     uint64_t issue_date,
     uint64_t expiry_date,
     const char* vc_signature,

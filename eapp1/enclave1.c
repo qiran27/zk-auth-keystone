@@ -1,5 +1,5 @@
 //******************************************************************************
-// Enclave1 - VC Prover (Holds Verifiable Credential)
+// Enclave1 - VC Prover (Holds Verifiable Credential with Real Signatures)
 // Copyright (c) 2025, Keystone TEE
 //******************************************************************************
 
@@ -19,6 +19,8 @@
 #define OCALL_WAIT_PROOF           7
 #define OCALL_SEND_RESULT          8
 #define OCALL_GET_RESULT           9
+#define OCALL_GET_ISSUER_INFO      10
+#define OCALL_GET_TRUSTED_ISSUERS  11
 
 // ============================================================================
 // Verifiable Credential Structure
@@ -73,7 +75,7 @@ int main() {
     char buffer[512];
     struct edge_data retdata;
     
-    print_msg("=== Enclave1: VC Prover (ZK lib inside Enclave) ===\n");
+    print_msg("=== Enclave1: VC Prover (Real Ed25519 Signatures) ===\n");
     
     // ========================================
     // Step 1: Initialize ZK system (Rust+ark-groth16)
@@ -88,7 +90,7 @@ int main() {
     print_msg("[Enclave1] ZK system initialized successfully\n");
     
     // ========================================
-    // Step 2: Load Verifiable Credential (from sealed storage)
+    // Step 2: Load Verifiable Credential with REAL signature
     // ========================================
     print_msg("[Enclave1] Loading VC from sealed storage...\n");
     
@@ -96,32 +98,91 @@ int main() {
     memset(&vc, 0, sizeof(vc));
     
     // In production, this should be loaded from sealed storage
-    // For demo, we use hardcoded values
+    // For demo, we use predefined values
     strncpy(vc.holder_id, "alice@company.com", sizeof(vc.holder_id) - 1);
     strncpy(vc.issuer, "HR_Department", sizeof(vc.issuer) - 1);
     vc.issue_date = 1609459200;     // 2021-01-01 00:00:00 UTC
-    vc.expiry_date = 1704067199;    // 2023-12-31 23:59:59 UTC
+    vc.expiry_date = 1735689599;    // 2024-12-31 23:59:59 UTC (extended for testing)
     
-    // Simulated Issuer signature (in production, this would be real Ed25519 signature)
-    // For demo, we use a fake signature that matches the expected format
-    const char* fake_signature = 
-        "1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"
-        "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321";
-    strncpy(vc.signature, fake_signature, sizeof(vc.signature) - 1);
+    // ========================================
+    // Step 3: Generate REAL Issuer keypair (deterministic, inside enclave)
+    // ========================================
+    print_msg("[Enclave1] Generating Issuer keypair (deterministic for testing)...\n");
+    
+    char issuer_public_key[65];
+    char issuer_private_key[65];
+    memset(issuer_public_key, 0, sizeof(issuer_public_key));
+    memset(issuer_private_key, 0, sizeof(issuer_private_key));
+    
+    // Generate deterministic keypair using seed 12345 (HR Department)
+    // This will generate REAL Ed25519 keys that can sign and verify
+    if (ZK_GenerateIssuerKeypairDeterministic(
+        12345,  // Seed for HR Department (must match Enclave2)
+        issuer_public_key, sizeof(issuer_public_key),
+        issuer_private_key, sizeof(issuer_private_key)
+    ) != 0) {
+        print_msg("[Enclave1] ERROR: Failed to generate Issuer keypair\n");
+        EAPP_RETURN(1);
+    }
     
     snprintf(buffer, sizeof(buffer), 
-             "[Enclave1] VC loaded:\n"
+             "[Enclave1] ✓ Generated real Ed25519 Issuer keypair\n"
+             "[Enclave1]   Public key: %.16s...\n", issuer_public_key);
+    print_msg(buffer);
+    
+    // Sign VC with Issuer private key
+    char vc_signature[129];
+    memset(vc_signature, 0, sizeof(vc_signature));
+    
+    if (ZK_SignVC(
+        vc.holder_id, strlen(vc.holder_id),
+        vc.issuer, strlen(vc.issuer),
+        vc.issue_date,
+        vc.expiry_date,
+        issuer_private_key,
+        vc_signature,
+        sizeof(vc_signature)
+    ) != 0) {
+        print_msg("[Enclave1] ERROR: Failed to sign VC\n");
+        EAPP_RETURN(1);
+    }
+    
+    strncpy(vc.signature, vc_signature, sizeof(vc.signature) - 1);
+    
+    snprintf(buffer, sizeof(buffer), 
+             "[Enclave1] VC loaded and signed:\n"
              "  - Holder: %s\n"
              "  - Issuer: %s\n"
              "  - Issue Date: %lu\n"
-             "  - Expiry Date: %lu\n",
-             vc.holder_id, vc.issuer, vc.issue_date, vc.expiry_date);
+             "  - Expiry Date: %lu\n"
+             "  - Signature: %.16s...\n",
+             vc.holder_id, vc.issuer, vc.issue_date, vc.expiry_date, vc.signature);
     print_msg(buffer);
     
+    // ========================================
+    // Step 4: Verify VC signature locally (self-check)
+    // ========================================
+    print_msg("[Enclave1] Verifying VC signature (self-check)...\n");
+    
+    int sig_valid = ZK_VerifyVCSignature(
+        vc.holder_id, strlen(vc.holder_id),
+        vc.issuer, strlen(vc.issuer),
+        vc.issue_date,
+        vc.expiry_date,
+        vc.signature,
+        issuer_public_key
+    );
+    
+    if (sig_valid != 1) {
+        print_msg("[Enclave1] ERROR: VC signature verification failed\n");
+        EAPP_RETURN(1);
+    }
+    
+    print_msg("[Enclave1] ✓ VC signature verified successfully\n");
     print_msg("[Enclave1] ✓ VC is private, never leaves this enclave\n");
     
     // ========================================
-    // Step 3: Send join request to GroupX
+    // Step 5: Send join request to GroupX
     // ========================================
     print_msg("[Enclave1] Requesting to join GroupX...\n");
     
@@ -133,7 +194,7 @@ int main() {
           &retdata, sizeof(struct edge_data));
     
     // ========================================
-    // Step 4: Receive challenge from Verifier
+    // Step 6: Receive challenge from Verifier
     // ========================================
     print_msg("[Enclave1] Waiting for challenge...\n");
     
@@ -157,25 +218,62 @@ int main() {
     print_msg(buffer);
     
     // ========================================
-    // Step 5: Verify VC is for the challenged Issuer
+    // Step 7: Verify VC is for the challenged Issuer
     // ========================================
-    print_msg("[Enclave1] Checking if VC matches required Issuer...\n");
+    print_msg("[Enclave1] Verifying VC matches required Issuer...\n");
     
-    // In a real implementation, we would:
-    // 1. Verify the VC signature matches the issuer_pubkey
-    // 2. Check if the VC is from the expected Issuer
-    // For demo, we assume it matches
+    // Check if the challenge's issuer_pubkey matches our VC's issuer
+    if (strncmp(challenge.issuer_pubkey, issuer_public_key, 64) != 0) {
+        print_msg("[Enclave1] ERROR: VC is not issued by the required Issuer\n");
+        EAPP_RETURN(1);
+    }
+    
+    // Verify signature again with the challenged issuer key
+    int verification_result = ZK_VerifyVCSignature(
+        vc.holder_id, strlen(vc.holder_id),
+        vc.issuer, strlen(vc.issuer),
+        vc.issue_date,
+        vc.expiry_date,
+        vc.signature,
+        challenge.issuer_pubkey
+    );
+    
+    if (verification_result != 1) {
+        print_msg("[Enclave1] ERROR: VC signature doesn't match challenged Issuer\n");
+        EAPP_RETURN(1);
+    }
     
     print_msg("[Enclave1] ✓ VC is issued by the required Issuer\n");
     
     // ========================================
-    // Step 6: Generate ZK proof (Groth16 with ark-groth16)
+    // Step 8: Check time constraints
+    // ========================================
+    print_msg("[Enclave1] Checking time constraints...\n");
+    
+    if (challenge.current_time < vc.issue_date) {
+        print_msg("[Enclave1] ERROR: VC not yet active\n");
+        EAPP_RETURN(1);
+    }
+    
+    if (challenge.current_time > vc.expiry_date) {
+        print_msg("[Enclave1] ERROR: VC has expired\n");
+        EAPP_RETURN(1);
+    }
+    
+    snprintf(buffer, sizeof(buffer), 
+             "[Enclave1] ✓ VC is active (issue: %lu, current: %lu, expiry: %lu)\n",
+             vc.issue_date, challenge.current_time, vc.expiry_date);
+    print_msg(buffer);
+    
+    // ========================================
+    // Step 9: Generate ZK proof (Groth16 with ark-groth16)
     // ========================================
     print_msg("[Enclave1] Generating Groth16 ZK proof for VC...\n");
     print_msg("[Enclave1] Proof will demonstrate:\n");
-    print_msg("           - VC signature is valid\n");
+    print_msg("           - VC signature is valid (Ed25519)\n");
     print_msg("           - VC is issued by trusted Issuer\n");
     print_msg("           - VC has not expired\n");
+    print_msg("           - VC is already active\n");
     print_msg("           - Proof is bound to challenge nonce\n");
     print_msg("[Enclave1] WITHOUT revealing any VC content!\n");
     
@@ -185,6 +283,8 @@ int main() {
     int proof_result = ZK_GenerateVCProof(
         vc.holder_id,           // Private: holder ID
         strlen(vc.holder_id),
+        vc.issuer,              // Private: issuer name
+        strlen(vc.issuer),
         vc.issue_date,          // Private: issue date
         vc.expiry_date,         // Private: expiry date
         vc.signature,           // Private: Issuer signature
@@ -200,17 +300,18 @@ int main() {
         print_msg("[Enclave1] Possible reasons:\n");
         print_msg("           - VC signature doesn't match Issuer key\n");
         print_msg("           - VC has expired\n");
+        print_msg("           - VC not yet active\n");
         print_msg("           - Circuit constraints failed\n");
         EAPP_RETURN(1);
     }
     
     snprintf(buffer, sizeof(buffer), 
-             "[Enclave1] Proof generated successfully (hex len: %zu)\n", 
+             "[Enclave1] ✓ Proof generated successfully (hex len: %zu)\n", 
              strlen(proof_hex));
     print_msg(buffer);
     
     // ========================================
-    // Step 7: Submit proof to Verifier
+    // Step 10: Submit proof to Verifier
     // ========================================
     print_msg("[Enclave1] Submitting proof to Verifier...\n");
     
@@ -223,7 +324,7 @@ int main() {
           &retdata, sizeof(struct edge_data));
     
     // ========================================
-    // Step 8: Get verification result
+    // Step 11: Get verification result
     // ========================================
     print_msg("[Enclave1] Waiting for verification result...\n");
     
@@ -242,9 +343,10 @@ int main() {
         if (strncmp(result_msg, "VALID", 5) == 0) {
             print_msg("[Enclave1] ✓✓✓ SUCCESS ✓✓✓\n");
             print_msg("[Enclave1] Verifier confirmed:\n");
-            print_msg("           - VC is valid\n");
+            print_msg("           - VC signature is valid (Ed25519)\n");
             print_msg("           - Issued by trusted Issuer\n");
-            print_msg("           - Not expired\n");
+            print_msg("           - Not expired and active\n");
+            print_msg("           - Proof binds to challenge nonce\n");
             print_msg("[Enclave1] BUT Verifier learned NOTHING about:\n");
             print_msg("           - Who I am (holder_id)\n");
             print_msg("           - What roles/claims I have\n");
@@ -258,7 +360,7 @@ int main() {
     }
     
     // ========================================
-    // Step 9: Generate attestation report
+    // Step 12: Generate attestation report
     // ========================================
     snprintf(buffer, sizeof(buffer), 
             "Enclave1 VC Prover - holder: %.16s...", vc.holder_id);
@@ -270,5 +372,4 @@ int main() {
     
     EAPP_RETURN(0);
 }
-
 
