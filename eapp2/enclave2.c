@@ -190,26 +190,7 @@ int main() {
     print_msg("=== Enclave2: VC Verifier (ZK lib inside Enclave) ===\n");
     
     // ========================================
-    // Step 1: Initialize ZK system (Rust+ark-groth16)
-    // ========================================
-    print_msg("[Enclave2] Initializing ZK system (Rust+ark-groth16)...\n");
-    
-    if (ZK_Init() != 0) {
-        print_msg("[Enclave2] ERROR: ZK initialization failed\n");
-        EAPP_RETURN(1);
-    }
-    
-    print_msg("[Enclave2] ZK system initialized successfully\n");
-    
-    // Initialize PRNG with entropy from CPU cycle counter
-    init_prng();
-    print_msg("[Enclave2] PRNG initialized (enclave-internal random source)\n");
-    
-    // Initialize challenge storage
-    memset(challenges, 0, sizeof(challenges));
-    
-    // ========================================
-    // Generate Trusted Issuer Public Keys (deterministic, inside enclave)
+    // Step 1: Generate Trusted Issuer Public Keys (deterministic, inside enclave)
     // ========================================
     print_msg("[Enclave2] Generating trusted Issuer public keys (deterministic)...\n");
     
@@ -278,10 +259,6 @@ int main() {
     print_msg("           Anyone with a valid VC from a trusted Issuer can join\n");
     
     // ========================================
-    // Main verification loop
-    // ========================================
-    
-    // ========================================
     // Phase 1: RECEIVE Join Request
     // ========================================
     print_msg("\n[Enclave2] === Phase 1: Join Request ===\n");
@@ -308,6 +285,7 @@ int main() {
         snprintf(buffer, sizeof(buffer), 
                  "[Enclave2] ✗ ERROR: Unknown group '%s'\n", join_req.group_name);
         print_msg(buffer);
+        print_msg("[Enclave2] No need to initialize ZK system (resource optimization)\n");
         
         const char* reject_msg = "REJECTED: Unknown group";
         ocall(OCALL_SEND_RESULT, (void*)reject_msg, strlen(reject_msg), 0, 0);
@@ -316,9 +294,35 @@ int main() {
     }
     
     snprintf(buffer, sizeof(buffer), 
-             "[Enclave2] ✓ Group recognized\n"
+             "[Enclave2] ✓ Group recognized: %s\n", join_req.group_name);
+    print_msg(buffer);
+    snprintf(buffer, sizeof(buffer), 
              "[Enclave2] Required Issuer: %.16s...\n", issuer_pubkey);
     print_msg(buffer);
+    
+    // ========================================
+    // Step 2: Initialize ZK system (only after valid join request)
+    // ========================================
+    print_msg("\n[Enclave2] Initializing ZK system for verification...\n");
+    print_msg("[Enclave2] Loading Groth16 setup (Rust+ark-groth16)...\n");
+    
+    if (ZK_Init() != 0) {
+        print_msg("[Enclave2] ERROR: ZK initialization failed\n");
+        
+        const char* error_msg = "REJECTED: System error";
+        ocall(OCALL_SEND_RESULT, (void*)error_msg, strlen(error_msg), 0, 0);
+        
+        EAPP_RETURN(1);
+    }
+    
+    print_msg("[Enclave2] ✓ ZK system initialized successfully\n");
+    
+    // Initialize PRNG with entropy
+    init_prng();
+    print_msg("[Enclave2] ✓ PRNG initialized (enclave-internal random source)\n");
+    
+    // Initialize challenge storage
+    memset(challenges, 0, sizeof(challenges));
     
     // ========================================
     // Phase 2: CHALLENGE - Generate and send challenge

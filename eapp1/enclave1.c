@@ -78,19 +78,7 @@ int main() {
     print_msg("=== Enclave1: VC Prover (Real Ed25519 Signatures) ===\n");
     
     // ========================================
-    // Step 1: Initialize ZK system (Rust+ark-groth16)
-    // ========================================
-    print_msg("[Enclave1] Initializing ZK system (Rust+ark-groth16)...\n");
-    
-    if (ZK_Init() != 0) {
-        print_msg("[Enclave1] ERROR: ZK initialization failed\n");
-        EAPP_RETURN(1);
-    }
-    
-    print_msg("[Enclave1] ZK system initialized successfully\n");
-    
-    // ========================================
-    // Step 2: Load Verifiable Credential with REAL signature
+    // Step 1: Load Verifiable Credential with REAL signature
     // ========================================
     print_msg("[Enclave1] Loading VC from sealed storage...\n");
     
@@ -105,7 +93,7 @@ int main() {
     vc.expiry_date = 1735689599;    // 2024-12-31 23:59:59 UTC (extended for testing)
     
     // ========================================
-    // Step 3: Generate REAL Issuer keypair (deterministic, inside enclave)
+    // Step 2: Generate REAL Issuer keypair (deterministic, inside enclave)
     // ========================================
     print_msg("[Enclave1] Generating Issuer keypair (deterministic for testing)...\n");
     
@@ -182,7 +170,7 @@ int main() {
     print_msg("[Enclave1] ✓ VC is private, never leaves this enclave\n");
     
     // ========================================
-    // Step 5: Send join request to GroupX
+    // Step 3: Send join request to GroupX
     // ========================================
     print_msg("[Enclave1] Requesting to join GroupX...\n");
     
@@ -194,14 +182,15 @@ int main() {
           &retdata, sizeof(struct edge_data));
     
     // ========================================
-    // Step 6: Receive challenge from Verifier
+    // Step 4: Receive challenge from Verifier
     // ========================================
     print_msg("[Enclave1] Waiting for challenge...\n");
     
     ocall(OCALL_GET_CHALLENGE, NULL, 0, &retdata, sizeof(struct edge_data));
     
     if (retdata.size == 0) {
-        print_msg("[Enclave1] ERROR: No challenge received\n");
+        print_msg("[Enclave1] ERROR: No challenge received (group unknown or rejected)\n");
+        print_msg("[Enclave1] No need to initialize ZK system (resource optimization)\n");
         EAPP_RETURN(1);
     }
     
@@ -210,7 +199,7 @@ int main() {
     copy_from_shared_safe(&challenge, retdata.offset, retdata.size);
     
     snprintf(buffer, sizeof(buffer), 
-             "[Enclave1] Received challenge:\n"
+             "[Enclave1] ✓ Challenge received:\n"
              "  - nonce: %lu\n"
              "  - issuer_pubkey: %.16s...\n"
              "  - current_time: %lu\n",
@@ -218,7 +207,20 @@ int main() {
     print_msg(buffer);
     
     // ========================================
-    // Step 7: Verify VC is for the challenged Issuer
+    // Step 5: Initialize ZK system (only after challenge received)
+    // ========================================
+    print_msg("\n[Enclave1] Initializing ZK system for proof generation...\n");
+    print_msg("[Enclave1] Loading Groth16 setup (Rust+ark-groth16)...\n");
+    
+    if (ZK_Init() != 0) {
+        print_msg("[Enclave1] ERROR: ZK initialization failed\n");
+        EAPP_RETURN(1);
+    }
+    
+    print_msg("[Enclave1] ✓ ZK system initialized successfully\n");
+    
+    // ========================================
+    // Step 6: Verify VC is for the challenged Issuer
     // ========================================
     print_msg("[Enclave1] Verifying VC matches required Issuer...\n");
     
@@ -246,7 +248,7 @@ int main() {
     print_msg("[Enclave1] ✓ VC is issued by the required Issuer\n");
     
     // ========================================
-    // Step 8: Check time constraints
+    // Step 7: Check time constraints
     // ========================================
     print_msg("[Enclave1] Checking time constraints...\n");
     
@@ -266,7 +268,7 @@ int main() {
     print_msg(buffer);
     
     // ========================================
-    // Step 9: Generate ZK proof (Groth16 with ark-groth16)
+    // Step 8: Generate ZK proof (Groth16 with ark-groth16)
     // ========================================
     print_msg("[Enclave1] Generating Groth16 ZK proof for VC...\n");
     print_msg("[Enclave1] Proof will demonstrate:\n");
@@ -311,7 +313,7 @@ int main() {
     print_msg(buffer);
     
     // ========================================
-    // Step 10: Submit proof to Verifier
+    // Step 9: Submit proof to Verifier
     // ========================================
     print_msg("[Enclave1] Submitting proof to Verifier...\n");
     
@@ -324,7 +326,7 @@ int main() {
           &retdata, sizeof(struct edge_data));
     
     // ========================================
-    // Step 11: Get verification result
+    // Step 10: Get verification result
     // ========================================
     print_msg("[Enclave1] Waiting for verification result...\n");
     
@@ -360,7 +362,7 @@ int main() {
     }
     
     // ========================================
-    // Step 12: Generate attestation report
+    // Step 11: Generate attestation report
     // ========================================
     snprintf(buffer, sizeof(buffer), 
             "Enclave1 VC Prover - holder: %.16s...", vc.holder_id);
