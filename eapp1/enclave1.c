@@ -51,19 +51,7 @@ int main() {
     print_msg("=== Enclave1: ZK Prover (ZK lib inside Enclave) ===\n");
     
     // ========================================
-    // Step 1: Initialize ZK system (Rust+ark-groth16)
-    // ========================================
-    print_msg("[Enclave1] Initializing ZK system (Rust+ark-groth16)...\n");
-    
-    if (ZK_Init() != 0) {
-        print_msg("[Enclave1] ERROR: ZK initialization failed\n");
-        EAPP_RETURN(1);
-    }
-    
-    print_msg("[Enclave1] ZK system initialized successfully\n");
-    
-    // ========================================
-    // Step 2: Load private user_id
+    // Step 1: Load private user_id
     // ========================================
     // In production, this should be loaded from sealed storage
     // For demo, we use a hardcoded value
@@ -73,10 +61,12 @@ int main() {
     print_msg("[Enclave1] Private user_id loaded (from sealed storage)\n");
     
     // ========================================
-    // Step 3: Compute public_id inside Enclave (using Rust ZK lib)
+    // Step 2: Compute public_id (only SHA256, no ZK init needed)
     // ========================================
     char public_id[65];
     memset(public_id, 0, sizeof(public_id));
+    
+    print_msg("[Enclave1] Computing public_id (SHA256 hash only)...\n");
     
     if (ZK_ComputePublicID(user_id, user_id_len, public_id, sizeof(public_id)) != 0) {
         print_msg("[Enclave1] ERROR: Failed to compute public_id\n");
@@ -88,7 +78,7 @@ int main() {
     print_msg(buffer);
     
     // ========================================
-    // Step 4: Send join request to Enclave2
+    // Step 3: Send join request to Enclave2
     // ========================================
     print_msg("[Enclave1] Requesting to join GroupX...\n");
     
@@ -101,12 +91,13 @@ int main() {
           &retdata, sizeof(struct edge_data));
     
     // ========================================
-    // Step 5: Receive challenge from Enclave2
+    // Step 4: Receive challenge from Enclave2
     // ========================================
     ocall(OCALL_GET_CHALLENGE, NULL, 0, &retdata, sizeof(struct edge_data));
     
     if (retdata.size == 0) {
         print_msg("[Enclave1] ERROR: Join request rejected (not in ACL)\n");
+        print_msg("[Enclave1] Authorization failed, no ZK initialization needed\n");
         EAPP_RETURN(1);
     }
     
@@ -114,8 +105,21 @@ int main() {
     copy_from_shared_safe(&nonce, retdata.offset, sizeof(nonce));
     
     snprintf(buffer, sizeof(buffer), 
-             "[Enclave1] Received challenge nonce: %lu\n", nonce);
+             "[Enclave1] ✓ Authorization passed, received challenge nonce: %lu\n", nonce);
     print_msg(buffer);
+    
+    // ========================================
+    // Step 5: Initialize ZK system (only after authorization passed)
+    // ========================================
+    print_msg("[Enclave1] Initializing ZK system for proof generation...\n");
+    print_msg("[Enclave1] Loading Groth16 setup (Rust+ark-groth16)...\n");
+    
+    if (ZK_Init() != 0) {
+        print_msg("[Enclave1] ERROR: ZK initialization failed\n");
+        EAPP_RETURN(1);
+    }
+    
+    print_msg("[Enclave1] ✓ ZK system initialized successfully\n");
     
     // ========================================
     // Step 6: Generate ZK proof inside Enclave (Groth16 with ark-groth16)
@@ -141,7 +145,7 @@ int main() {
     }
     
     snprintf(buffer, sizeof(buffer), 
-             "[Enclave1] Proof generated successfully (hex len: %zu)\n", 
+             "[Enclave1] ✓ Proof generated successfully (hex len: %zu)\n", 
              strlen(proof_hex));
     print_msg(buffer);
     
@@ -193,7 +197,7 @@ int main() {
     char report_buffer[2048];
     attest_enclave((void*)report_buffer, buffer, strlen(buffer));
     
-    print_msg("[Enclave1] Test completed\n");
+    print_msg("[Enclave1] ✓ Test completed successfully\n");
     
     EAPP_RETURN(0);
 }

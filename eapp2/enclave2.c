@@ -166,33 +166,12 @@ int main() {
     print_msg("=== Enclave2: ZK Verifier with ACL (ZK lib inside Enclave) ===\n");
     
     // ========================================
-    // Step 1: Initialize ZK system (Rust+ark-groth16)
+    // Step 1: Initialize ACL and prepare for authorization check
     // ========================================
-    print_msg("[Enclave2] Initializing ZK system (Rust+ark-groth16)...\n");
-    
-    if (ZK_Init() != 0) {
-        print_msg("[Enclave2] ERROR: ZK initialization failed\n");
-        EAPP_RETURN(1);
-    }
-    
-    print_msg("[Enclave2] ZK system initialized successfully\n");
-    
-    // Initialize PRNG with entropy from CPU cycle counter
-    init_prng();
-    print_msg("[Enclave2] PRNG initialized (enclave-internal random source)\n");
-    
-    // Initialize challenge storage
-    memset(challenges, 0, sizeof(challenges));
-    
     snprintf(buffer, sizeof(buffer), 
              "[Enclave2] ACL loaded: %d authorized public_ids\n", 3);
     print_msg(buffer);
-    
     print_msg("[Enclave2] Ready to accept join requests\n");
-    
-    // ========================================
-    // Main verification loop
-    // ========================================
     
     // ========================================
     // Phase 1: AUTHORIZATION - Receive join request and check ACL
@@ -220,7 +199,8 @@ int main() {
              "  - group: %s\n", join_req.group_name);
     print_msg(buffer);
     
-    // Check ACL
+    // Check ACL first - reject early if not authorized
+    print_msg("[Enclave2] Checking authorization against ACL...\n");
     if (!check_acl(join_req.public_id)) {
         snprintf(buffer, sizeof(buffer), 
                  "[Enclave2] ✗ Authorization FAILED: public_id not in ACL\n");
@@ -229,12 +209,37 @@ int main() {
         const char* reject_msg = "REJECTED: Not in ACL";
         ocall(OCALL_SEND_RESULT, (void*)reject_msg, strlen(reject_msg), 0, 0);
         
+        print_msg("[Enclave2] Rejecting request without ZK initialization (resource optimization)\n");
         EAPP_RETURN(1);
     }
     
     snprintf(buffer, sizeof(buffer), 
              "[Enclave2] ✓ Authorization PASSED: public_id is in ACL\n");
     print_msg(buffer);
+    
+    // ========================================
+    // Step 2: Initialize ZK system (only after ACL check passes)
+    // ========================================
+    print_msg("\n[Enclave2] Initializing ZK system for authenticated user...\n");
+    print_msg("[Enclave2] Loading Groth16 setup (Rust+ark-groth16)...\n");
+    
+    if (ZK_Init() != 0) {
+        print_msg("[Enclave2] ERROR: ZK initialization failed\n");
+        
+        const char* error_msg = "REJECTED: System error";
+        ocall(OCALL_SEND_RESULT, (void*)error_msg, strlen(error_msg), 0, 0);
+        
+        EAPP_RETURN(1);
+    }
+    
+    print_msg("[Enclave2] ✓ ZK system initialized successfully\n");
+    
+    // Initialize PRNG with entropy
+    init_prng();
+    print_msg("[Enclave2] ✓ PRNG initialized (enclave-internal random source)\n");
+    
+    // Initialize challenge storage
+    memset(challenges, 0, sizeof(challenges));
     
     // ========================================
     // Phase 2: AUTHENTICATION - Generate challenge
